@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jfrog-artifactory
+  namespace: jfrog-namespace 
+  labels:
+    app: jfrog-artifactory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jfrog-artifactory
+  template:
+    metadata:
+      labels:
+        app: jfrog-artifactory
+    spec:
+      containers:
+      - name: jfrog-artifactory
+        image: releases-docker.jfrog.io/jfrog/artifactory-pro:7.77.6
+        ports:
+        - containerPort: 8081
+          name: comms
+        - containerPort: 8082
+          name: ui
+        volumeMounts:
+        - name: jfrog-artifactory-data
+          mountPath: /var/opt/jfrog/artifactory
+      volumes:
+      - name: jfrog-artifactory-data
+        persistentVolumeClaim:
+          claimName: jfrog-artifactory-pvc

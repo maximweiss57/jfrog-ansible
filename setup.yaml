@@ -1,0 +1,239 @@
+---
+- name: setup
+  hosts: all
+
+#setting up evironment
+#------------------------------------------------------------------------------------------------------------------------
+ 
+ tasks:
+    - name: Install dnf-plugins-core
+      dnf:
+        name: dnf-plugins-core
+        state: present
+
+    - name: Add Docker repository
+      dnf_repository:
+        name: docker-repo
+        baseurl: https://download.docker.com/linux/fedora/docker-ce.repo
+        description: Docker CE Stable - $basearch
+        enabled: yes
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/fedora/gpg
+
+    - name: Install Docker packages
+      dnf:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-buildx-plugin
+        - docker-compose-plugin
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+    
+    - name: install kind
+      shell: |
+        [ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64
+        chmod +x ./kind
+        mv ./kind /usr/local/bin/kind
+      args:
+        executable: /bin/bash
+
+    - name: install kubectl
+      shell: |
+        curl -LO https://dl.k8s.io/release/v1.21.0/bin/linux/amd64/kubectl
+        chmod +x kubectl
+        mv kubectl /usr/local/bin/kubectl
+      args:
+        executable: /bin/bash
+
+    - name: install helm
+      dnf:
+        name: helm
+        state: present
+
+    - name: copy k8s manifests to remote host
+      copy:
+        src: "{{ item }}"
+        dest: /home/ansible
+      with_fileglob:
+        - ./jfrog-yamls/*.yaml
+        - ./flask-yamls/*.yaml
+        - ./*.yaml
+
+    - name: Create kind cluster
+      command: kind create cluster --config /home/ansible/kind-config.yaml
+    
+    - name: install ingress
+      shell: |
+        helm pull oci://ghcr.io/nginxinc/charts/nginx-ingress --untar --version 1.1.3        kubectl wait --for=condition=available --timeout=600s deployment/ingress-nginx-controller -n ingress-nginx
+        kubectl apply -f nginx-ingress/crds/
+        helm install nginx-ingress oci://ghcr.io/nginxinc/charts/nginx-ingress --version 1.1.3
+      args:
+        executable: /bin/bash
+
+    - name: install metallb-system
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.6/manifests/namespace.yaml
+        kubectl wait --for=condition=available --timeout=600s deployment/controller -n metallb-system
+        kubectl apply -f /home/ansible/metalLB.yaml
+      args:
+        executable: /bin/bash
+
+#deploying jfrog
+#------------------------------------------------------------------------------------------------------------------------
+    
+    - name: Install openssl
+      dnf:
+        name: openssl
+        state: present
+
+    - name: check /etc/ssl/private existance
+      ansible.builtin.file:
+        path: /etc/ssl/private
+        state: directory
+        mode: '0700'
+
+
+    - name: check /etc/ssl/csr existance
+      ansible.builtin.file:
+        path: /etc/ssl/csr
+        state: directory
+        mode: '0700'
+
+
+    - name: check /etc/ssl/crt existance
+      ansible.builtin.file:
+        path: /etc/ssl/crt
+        state: directory
+        mode: '0700'
+
+    - name: Generate a private key for docker-stav.octopus.lab
+      ansible.builtin.openssl_privatekey:
+        path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
+
+    - name: Generate a Certificate Signing Request
+      ansible.builtin.openssl_csr:
+        path: /etc/ssl/csr/docker-stav.octopus.lab.csr
+        privatekey_path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
+        common_name: docker-ortuser11.octopus.lab
+        
+    - name: Generate a Self Signed OpenSSL certificate
+      ansible.builtin.openssl_certificate:
+        path: /etc/ssl/crt/docker-ortuser11.octopus.lab.crt
+        privatekey_path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
+        csr_path: /etc/ssl/csr/docker-ortuser11.octopus.lab.csr
+        provider: selfsigned
+
+    - name: Generate a new private key
+      ansible.builtin.openssl_privatekey:
+        path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
+
+    - name: Generate a Certificate Signing Request
+      ansible.builtin.openssl_csr:
+        path: /etc/ssl/csr/jfrog-ortuser11.octopus.lab.csr
+        privatekey_path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
+        common_name: jfrog-ortuser11.octopus.lab
+
+    - name: Generate a Self Signed OpenSSL certificate
+      ansible.builtin.openssl_certificate:
+        path: /etc/ssl/crt/jfrog-ortuser11.octopus.lab.crt
+        privatekey_path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
+        csr_path: /etc/ssl/csr/jfrog-ortuser11.octopus.lab.csr
+        provider: selfsigned
+
+    - name: create jfrog namespace
+      k8s:
+        state: present
+        definition: /home/ansible/jfrog-yamls/jfrog-namespace.yaml
+
+    - name: create jfrog deployment/controller
+      k8s:
+        state: present
+        definition: /home/ansible/jfrog-yamls/jfrog-deployment.yaml
+
+    - name: create jfrog service
+      k8s:
+        state: present
+        definition: /home/ansible/jfrog-yamls/jfrog-service.yaml
+
+    - name: Fetch the certificate from the remote host
+      fetch:
+        src: /etc/ssl/crt/docker-ortuser11.octopus.lab.crt
+        dest: /tmp/docker-ortuser11.octopus.lab.crt
+        flat: yes
+
+    - name: Fetch the private key from the remote host
+      fetch:
+        src: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
+        dest: /tmp/docker-ortuser11.octopus.lab.pem
+        flat: yes
+
+    - name: jfrog tls
+      k8s:
+        state: present
+        definition: /home/ansible/jfrog-yamls/jfrog-tls.yaml
+
+    - name: jfrog ingress
+      k8s:
+        state: present
+        definition: /home/ansible/jfrog-yamls/jfrog-ingress.yaml
+    
+    - name: Extract ingress IP
+      command: "kubectl get ingress -n jfrog-namespace jfrog-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
+      register: ingress_ip
+
+    - name: Apply to hosts file
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ ingress_ip.stdout }} jfrog-ortuser11.octopus.lab"
+        state: present
+
+    - name: Apply coms to hosts file
+    ansible.builtin.lineinfile:
+      path: /etc/hosts
+      line: "{{ ingress_ip.stdout }} docker-ortuser11.octopus.lab"
+      state: present
+
+    - name: Copy to crt to Docker control plane
+      shell: |
+        docker cp /etc/ssl/crt/docker-ortuser11.octopus.lab.crt kind-cluster-control-plane:/etc/ssl/certs
+        docker exec kind-cluster-control-plane update-ca-certificates
+        docker exec kind-cluster-control-plane systemctl restart containerd
+   
+    - name: Copy to crt to Docker worker
+      shell: |
+        docker cp /etc/ssl/crt/docker-stav.octopus.lab.crt kind-cluster-worker:/etc/ssl/certs
+        docker exec kind-cluster-worker update-ca-certificates
+        docker exec kind-cluster-worker systemctl restart containerd
+      
+    - name: Copy to crt to Docker worker2
+      ansible.builtin.shell: |
+        docker cp /etc/ssl/crt/docker-stav.octopus.lab.crt kind-cluster-worker2:/etc/ssl/certs
+        docker exec kind-cluster-worker2 update-ca-certificates
+        docker exec kind-cluster-worker2 systemctl restart containerd      
+
+    - name: Allow it through SELinux
+      ansible.builtin.seboolean:
+        name: httpd_can_network_connect
+        state: yes
+        persistent: yes
+
+#flask deployment 
+#------------------------------------------------------------------------------------------------------------------------
+
+    - name: Create Flask application directory
+      ansible.builtin.file:
+        path: /home/ansible/flask
+        state: directory
+        mode: '0755'
+
+    - name: Copy Flask application to remote host
+      copy:
+        src: ./app.py
+        dest: /home/ansible/flask

@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jfrog-ingress-comms
+  namespace: jfrog-namespace
+  annotations:
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    ingress.kubernetes.io/proxy-body-size: "0"
+    ingress.kubernetes.io/proxy-read-timeout: "600"
+    ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.org/client-max-body-size: "0"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header    X-JFrog-Override-Base-Url http://docker-ortuser11.octopus.lab;
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - jfrog-ortuser11.octopus.lab
+    - docker-ortuser11.octopus.lab
+    secretName: artifactory-tls
+  rules:
+  - host: docker-ortuser11.octopus.lab
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: jfrog-service
+            port:
+              number: 8081
