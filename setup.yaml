@@ -224,6 +224,11 @@
         state: yes
         persistent: yes
 
+    - name: Prompt user for input
+    pause:
+      prompt: "Please go to jfrog-ortuser11.octopus.lab and create a docker-repository with your jfrog license. Afterwards, press 1 to continue."
+    register: user_input
+
 #flask deployment 
 #------------------------------------------------------------------------------------------------------------------------
 
@@ -237,3 +242,46 @@
       copy:
         src: ./app.py
         dest: /home/ansible/flask
+
+    - name: Copy Dockerfile to remote host
+      copy:
+        src: ./Dockerfile
+        dest: /home/ansible/flask
+
+    - name: build image
+      shell: |
+        docker build -t flask-app /home/ansible/flask
+      args:
+        executable: /bin/bash
+
+    - name: login to jfrog registry and push image
+      shell: |
+        docker login docker-ortuser11.octopus.lab -u admin -p Password1
+        docker tag flask-app docker-ortuser11.octopus.lab/flask-app:latest
+        docker push docker-ortuser11.octopus.lab/flask-app:latest
+
+    - name: create a secret for the docker registry
+      ansible.builtin.shell:
+        cmd: |
+          kubectl create secret docker-registry regcred \
+          --docker-server=docker-ortuser11.octopus.lab \
+          --docker-username=admin \
+          --docker-password=Password1 \
+          --docker-email=your-email@example.com \
+          -n flask-app
+
+    - name: Extract IP of the flask ingress
+      ansible.builtin.command: "kubectl get ingress -n flask-app flask-app -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
+      register: ingress
+
+    - name: Apply to hosts file
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ ingress.stdout }} flask-ortuser11.octopus.lab"
+        state: present
+
+    - name: Allow it through SE Linux with became
+      ansible.builtin.seboolean:
+        name: httpd_can_network_connect
+        state: yes
+        persistent: yes
