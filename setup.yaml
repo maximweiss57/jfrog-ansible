@@ -56,11 +56,11 @@
         name: python3-pip
         state: present
 
-    - name :
+    - name : Install required Python libraries
       pip: 
         name: kubernetes
         state: present
-        
+
     - name: copy k8s manifests to remote host
       copy:
         src: "{{ item }}"
@@ -130,7 +130,7 @@
         csr_path: /etc/ssl/csr/docker-ortuser11.octopus.lab.csr
         provider: selfsigned
 
-    - name: Generate a new private key
+    - name: Generate a new private key for jfrog-ortuser11.octopus.lab
       ansible.builtin.openssl_privatekey:
         path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
 
@@ -148,19 +148,13 @@
         provider: selfsigned
 
     - name: create jfrog namespace
-      k8s:
-        state: present
-        definition: /home/ansible/jfrog-yamls/jfrog-namespace.yaml
+      shell: kubectl apply -f /home/ansible/jfrog-namespace.yaml
 
     - name: create jfrog deployment/controller
-      k8s:
-        state: present
-        definition: /home/ansible/jfrog-yamls/jfrog-deployment.yaml
+      shell: kubectl apply -f /home/ansible/jfrog-deployment.yaml
 
     - name: create jfrog service
-      k8s:
-        state: present
-        definition: /home/ansible/jfrog-yamls/jfrog-service.yaml
+      shell: kubectl apply -f /home/ansible/jfrog-service.yaml
 
     - name: Fetch the certificate from the remote host
       fetch:
@@ -175,14 +169,10 @@
         flat: yes
 
     - name: jfrog tls
-      k8s:
-        state: present
-        definition: /home/ansible/jfrog-yamls/jfrog-tls.yaml
+      shell: kubectl apply -f /home/ansible/tls-secret.yaml
 
     - name: jfrog ingress
-      k8s:
-        state: present
-        definition: /home/ansible/jfrog-yamls/jfrog-ingress.yaml
+      shell: kubectl apply -f /home/ansible/jfrog-ingress.yaml
     
     - name: Extract ingress IP
       command: "kubectl get ingress -n jfrog-namespace jfrog-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
