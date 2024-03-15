@@ -90,65 +90,69 @@
       args:
         executable: /bin/bash
 
-    - name: Install openssl
-      dnf:
-        name: openssl
-        state: present
+    # - name: Install openssl
+    #   dnf:
+    #     name: openssl
+    #     state: present
 
-    - name: check /etc/ssl/private existence
-      ansible.builtin.file:
-        path: /etc/ssl/private
-        state: directory
-        mode: '0700'
+    # - name: check /etc/ssl/private existence
+    #   ansible.builtin.file:
+    #     path: /etc/ssl/private
+    #     state: directory
+    #     mode: '0700'
 
-    - name: check /etc/ssl/csr existence
-      ansible.builtin.file:
-        path: /etc/ssl/csr
-        state: directory
-        mode: '0700'
+    # - name: check /etc/ssl/csr existence
+    #   ansible.builtin.file:
+    #     path: /etc/ssl/csr
+    #     state: directory
+    #     mode: '0700'
 
-    - name: check /etc/ssl/crt existence
-      ansible.builtin.file:
-        path: /etc/ssl/crt
-        state: directory
-        mode: '0700'
+    # - name: check /etc/ssl/crt existence
+    #   ansible.builtin.file:
+    #     path: /etc/ssl/crt
+    #     state: directory
+    #     mode: '0700'
 
-    - name: Generate a private key for docker-ortuser11.octopus.lab
-      ansible.builtin.openssl_privatekey:
-        path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
+    # - name: Generate a private key for docker-ortuser11.octopus.lab
+    #   ansible.builtin.openssl_privatekey:
+    #     path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
 
-    - name: Generate a Certificate Signing Request
-      ansible.builtin.openssl_csr:
-        path: /etc/ssl/csr/docker-ortuser11.octopus.lab.csr
-        privatekey_path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
-        common_name: docker-ortuser11.octopus.lab
+    # - name: Generate a Certificate Signing Request
+    #   ansible.builtin.openssl_csr:
+    #     path: /etc/ssl/csr/docker-ortuser11.octopus.lab.csr
+    #     privatekey_path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
+    #     common_name: docker-ortuser11.octopus.lab
         
-    - name: Generate a Self Signed OpenSSL certificate
-      ansible.builtin.openssl_certificate:
-        path: /etc/ssl/crt/docker-ortuser11.octopus.lab.crt
-        privatekey_path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
-        csr_path: /etc/ssl/csr/docker-ortuser11.octopus.lab.csr
-        provider: selfsigned
+    # - name: Generate a Self Signed OpenSSL certificate
+    #   ansible.builtin.openssl_certificate:
+    #     path: /etc/ssl/crt/docker-ortuser11.octopus.lab.crt
+    #     privatekey_path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
+    #     csr_path: /etc/ssl/csr/docker-ortuser11.octopus.lab.csr
+    #     provider: selfsigned
 
-    - name: Generate a new private key for jfrog-ortuser11.octopus.lab
-      ansible.builtin.openssl_privatekey:
-        path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
+    # - name: Generate a new private key for jfrog-ortuser11.octopus.lab
+    #   ansible.builtin.openssl_privatekey:
+    #     path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
 
-    - name: Generate a Certificate Signing Request
-      ansible.builtin.openssl_csr:
-        path: /etc/ssl/csr/jfrog-ortuser11.octopus.lab.csr
-        privatekey_path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
-        common_name: jfrog-ortuser11.octopus.lab
+    # - name: Generate a Certificate Signing Request
+    #   ansible.builtin.openssl_csr:
+    #     path: /etc/ssl/csr/jfrog-ortuser11.octopus.lab.csr
+    #     privatekey_path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
+    #     common_name: jfrog-ortuser11.octopus.lab
 
-    - name: Generate a Self Signed OpenSSL certificate
-      ansible.builtin.openssl_certificate:
-        path: /etc/ssl/crt/jfrog-ortuser11.octopus.lab.crt
-        privatekey_path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
-        csr_path: /etc/ssl/csr/jfrog-ortuser11.octopus.lab.csr
-        provider: selfsigned
+    # - name: Generate a Self Signed OpenSSL certificate
+    #   ansible.builtin.openssl_certificate:
+    #     path: /etc/ssl/crt/jfrog-ortuser11.octopus.lab.crt
+    #     privatekey_path: /etc/ssl/private/jfrog-ortuser11.octopus.lab.pem
+    #     csr_path: /etc/ssl/csr/jfrog-ortuser11.octopus.lab.csr
+    #     provider: selfsigned
 
     - name: create jfrog namespace
       shell: kubectl apply -f /home/ansible/jfrog-namespace.yaml
+
+    - name: create jfrog pvc
+      shell: kubectl apply -f /home/ansible/pv.yaml
+      shell: kubectl apply -f /home/ansible/pvc.yaml
 
     - name: create jfrog deployment/controller
       shell: kubectl apply -f /home/ansible/jfrog-deployment.yaml
@@ -156,20 +160,21 @@
     - name: create jfrog service
       shell: kubectl apply -f /home/ansible/jfrog-service.yaml
 
-    - name: Fetch the certificate from the remote host
-      fetch:
-        src: /etc/ssl/crt/docker-ortuser11.octopus.lab.crt
-        dest: /tmp/docker-ortuser11.octopus.lab.crt
-        flat: yes
+    # - name: Fetch the certificate from the remote host
+    #   fetch:
+    #     src: /etc/ssl/crt/docker-ortuser11.octopus.lab.crt
+    #     dest: /tmp/docker-ortuser11.octopus.lab.crt
+    #     flat: yes
 
-    - name: Fetch the private key from the remote host
-      fetch:
-        src: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
-        dest: /tmp/docker-ortuser11.octopus.lab.pem
-        flat: yes
+    # - name: Fetch the private key from the remote host
+    #   fetch:
+    #     src: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
+    #     dest: /tmp/docker-ortuser11.octopus.lab.pem
+    #     flat: yes
 
-    - name: jfrog tls
-      shell: kubectl apply -f /home/ansible/tls-secret.yaml
+    #- name: jfrog tls
+    #  shell: kubectl apply -f /home/ansible/tls-secret.yaml
+    #  no_log: true
 
     - name: jfrog ingress
       shell: kubectl apply -f /home/ansible/jfrog-ingress.yaml
