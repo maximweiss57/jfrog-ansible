@@ -2,23 +2,17 @@
 - name: setup
   hosts: all
 
-#setting up evironment
-#------------------------------------------------------------------------------------------------------------------------
- 
- tasks:
+  tasks:
     - name: Install dnf-plugins-core
       dnf:
         name: dnf-plugins-core
         state: present
 
+    - name: Add Docker's official GPG key
+      ansible.builtin.shell: curl -fsSL https://download.docker.com/linux/fedora/gpg | sudo gpg --import -
+
     - name: Add Docker repository
-      dnf_repository:
-        name: docker-repo
-        baseurl: https://download.docker.com/linux/fedora/docker-ce.repo
-        description: Docker CE Stable - $basearch
-        enabled: yes
-        gpgcheck: yes
-        gpgkey: https://download.docker.com/linux/fedora/gpg
+      shell: sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
 
     - name: Install Docker packages
       dnf:
@@ -57,6 +51,16 @@
         name: helm
         state: present
 
+    - name: install pip
+      dnf:
+        name: python3-pip
+        state: present
+
+    - name :
+      pip: 
+        name: kubernetes
+        state: present
+        
     - name: copy k8s manifests to remote host
       copy:
         src: "{{ item }}"
@@ -67,11 +71,12 @@
         - ./*.yaml
 
     - name: Create kind cluster
-      command: kind create cluster --config /home/ansible/kind-config.yaml
+      command: kind create cluster --config /home/ansible/cluster-config.yaml
     
     - name: install ingress
       shell: |
-        helm pull oci://ghcr.io/nginxinc/charts/nginx-ingress --untar --version 1.1.3        kubectl wait --for=condition=available --timeout=600s deployment/ingress-nginx-controller -n ingress-nginx
+        helm pull oci://ghcr.io/nginxinc/charts/nginx-ingress --untar --version 1.1.3
+        kubectl wait --for=condition=available --timeout=600s deployment/ingress-nginx-controller -n ingress-nginx
         kubectl apply -f nginx-ingress/crds/
         helm install nginx-ingress oci://ghcr.io/nginxinc/charts/nginx-ingress --version 1.1.3
       args:
@@ -79,47 +84,42 @@
 
     - name: install metallb-system
       shell: |
-        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.6/manifests/namespace.yaml
+        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.3/config/manifests/metallb-native.yaml
         kubectl wait --for=condition=available --timeout=600s deployment/controller -n metallb-system
         kubectl apply -f /home/ansible/metalLB.yaml
       args:
         executable: /bin/bash
 
-#deploying jfrog
-#------------------------------------------------------------------------------------------------------------------------
-    
     - name: Install openssl
       dnf:
         name: openssl
         state: present
 
-    - name: check /etc/ssl/private existance
+    - name: check /etc/ssl/private existence
       ansible.builtin.file:
         path: /etc/ssl/private
         state: directory
         mode: '0700'
 
-
-    - name: check /etc/ssl/csr existance
+    - name: check /etc/ssl/csr existence
       ansible.builtin.file:
         path: /etc/ssl/csr
         state: directory
         mode: '0700'
 
-
-    - name: check /etc/ssl/crt existance
+    - name: check /etc/ssl/crt existence
       ansible.builtin.file:
         path: /etc/ssl/crt
         state: directory
         mode: '0700'
 
-    - name: Generate a private key for docker-stav.octopus.lab
+    - name: Generate a private key for docker-ortuser11.octopus.lab
       ansible.builtin.openssl_privatekey:
         path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
 
     - name: Generate a Certificate Signing Request
       ansible.builtin.openssl_csr:
-        path: /etc/ssl/csr/docker-stav.octopus.lab.csr
+        path: /etc/ssl/csr/docker-ortuser11.octopus.lab.csr
         privatekey_path: /etc/ssl/private/docker-ortuser11.octopus.lab.pem
         common_name: docker-ortuser11.octopus.lab
         
@@ -195,10 +195,10 @@
         state: present
 
     - name: Apply coms to hosts file
-    ansible.builtin.lineinfile:
-      path: /etc/hosts
-      line: "{{ ingress_ip.stdout }} docker-ortuser11.octopus.lab"
-      state: present
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ ingress_ip.stdout }} docker-ortuser11.octopus.lab"
+        state: present
 
     - name: Copy to crt to Docker control plane
       shell: |
@@ -208,13 +208,13 @@
    
     - name: Copy to crt to Docker worker
       shell: |
-        docker cp /etc/ssl/crt/docker-stav.octopus.lab.crt kind-cluster-worker:/etc/ssl/certs
+        docker cp /etc/ssl/crt/docker-ortuser11.octopus.lab.crt kind-cluster-worker:/etc/ssl/certs
         docker exec kind-cluster-worker update-ca-certificates
         docker exec kind-cluster-worker systemctl restart containerd
       
     - name: Copy to crt to Docker worker2
       ansible.builtin.shell: |
-        docker cp /etc/ssl/crt/docker-stav.octopus.lab.crt kind-cluster-worker2:/etc/ssl/certs
+        docker cp /etc/ssl/crt/docker-ortuser11.octopus.lab.crt kind-cluster-worker2:/etc/ssl/certs
         docker exec kind-cluster-worker2 update-ca-certificates
         docker exec kind-cluster-worker2 systemctl restart containerd      
 
@@ -225,12 +225,11 @@
         persistent: yes
 
     - name: Prompt user for input
-    pause:
-      prompt: "Please go to jfrog-ortuser11.octopus.lab and create a docker-repository with your jfrog license. Afterwards, press 1 to continue."
-    register: user_input
+      pause:
+        prompt: "Please go to jfrog-ortuser11.octopus.lab and create a docker-repository with your jfrog license. Afterwards, press 1 to continue."
+      register: user_input
 
-#flask deployment 
-#------------------------------------------------------------------------------------------------------------------------
+# flask deployment 
 
     - name: Create Flask application directory
       ansible.builtin.file:
@@ -280,7 +279,7 @@
         line: "{{ ingress.stdout }} flask-ortuser11.octopus.lab"
         state: present
 
-    - name: Allow it through SE Linux with became
+    - name: Allow it through SELinux
       ansible.builtin.seboolean:
         name: httpd_can_network_connect
         state: yes
