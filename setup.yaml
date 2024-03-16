@@ -61,6 +61,20 @@
         name: kubernetes
         state: present
 
+    - name: ensure existance of daemon.json
+      ansible.builtin.file:
+        path: /etc/docker/daemon.json
+        state: touch
+
+    - name: Edit /etc/docker/daemon.json
+      ansible.builtin.lineinfile:
+        path: /etc/docker/daemon.json
+        line: '  "insecure-registries": ["jfrog-ortuser11.octopus.lab", "docker-ortuser11.octopus.lab"]'
+        backrefs: yes
+
+
+
+
     - name: copy k8s manifests to remote host
       copy:
         src: "{{ item }}"
@@ -151,8 +165,10 @@
       shell: kubectl apply -f /home/ansible/jfrog-namespace.yaml
 
     - name: create jfrog pvc
-      shell: kubectl apply -f /home/ansible/pv.yaml
       shell: kubectl apply -f /home/ansible/pvc.yaml
+
+    - name: create jfrog pv
+      shell: kubectl apply -f /home/ansible/pv.yaml
 
     - name: create jfrog deployment/controller
       shell: kubectl apply -f /home/ansible/jfrog-deployment.yaml
@@ -178,6 +194,9 @@
 
     - name: jfrog ingress
       shell: kubectl apply -f /home/ansible/jfrog-ingress.yaml
+    
+    - name: create ingress-comms
+      shell: kubectl apply -f /home/ansible/jfrog-ingress-comms.yaml
     
     - name: Extract ingress IP
       command: "kubectl get ingress -n jfrog-namespace jfrog-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
@@ -242,30 +261,39 @@
         src: ./Dockerfile
         dest: /home/ansible/flask
 
+    - name: copy requirements.txt to remote host
+      copy:
+        src: ./requirements.txt
+        dest: /home/ansible/flask
+
     - name: build image
       shell: |
         docker build -t flask-app /home/ansible/flask
       args:
         executable: /bin/bash
 
+
     - name: login to jfrog registry and push image
       shell: |
-        docker login docker-ortuser11.octopus.lab -u admin -p Password1
+        docker login -u admin -p Password1 docker-ortuser11.octopus.lab
         docker tag flask-app docker-ortuser11.octopus.lab/flask-app:latest
-        docker push docker-ortuser11.octopus.lab/flask-app:latest
+        docker push docker -ortuser11.octopus.lab/flask-app:latest
+    
 
     - name: create a secret for the docker registry
-      ansible.builtin.shell:
-        cmd: |
-          kubectl create secret docker-registry regcred \
-          --docker-server=docker-ortuser11.octopus.lab \
-          --docker-username=admin \
-          --docker-password=Password1 \
-          --docker-email=your-email@example.com \
-          -n flask-app
+      shell: kubectl apply -f /home/ansible/docker-secret.yaml
+        
+    - name: create flask namespace
+      shell: kubectl apply -f /home/ansible/flask-namespace.yaml
+    
+    - name: create flask deployment
+      shell: kubectl apply -f /home/ansible/flask-dep.yaml
+
+    - name: create flask service
+      shell: kubectl apply -f /home/ansible/flask-service.yaml
 
     - name: Extract IP of the flask ingress
-      ansible.builtin.command: "kubectl get ingress -n flask-app flask-app -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
+      command: "kubectl get ingress -n flask-app flask-app -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
       register: ingress
 
     - name: Apply to hosts file

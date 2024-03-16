@@ -14,9 +14,9 @@ spec:
         app: flask-app
     spec:
       containers:
-        - name: flask-app
-          image: docker-ortuser11.octopus.lab/docker-local/flask-app:latest
-          ports:
-            - containerPort: 5000
+      - name: flask-app
+        image: docker-ortuser11.octopus.lab/flask-app/flask-app:latest
+        ports:
+        - containerPort: 5000
       imagePullSecrets:
-        - name: regcred
+      - name: docker-secret
